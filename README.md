@@ -38,6 +38,10 @@ Alpha Vantage API
   MERGE into production table (upsert on date)
 ```
 
+## DAG in Airflow
+
+![DAG Graph View](screenshots/dag_graph_view.png)
+
 ## What it does
 
 Every day, the pipeline pulls the previous day's OHLCV (open/high/low/close/volume) data for a stock ticker from Alpha Vantage, stores the raw response in S3, transforms it into a clean tabular format, and loads it into a Snowflake table — automatically, without any manual intervention, and safely re-runnable if it fails partway through.
