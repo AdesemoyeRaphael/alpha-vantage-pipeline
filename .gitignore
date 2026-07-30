@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+airflow.cfg
+airflow.db
+logs/
+*.parquet
