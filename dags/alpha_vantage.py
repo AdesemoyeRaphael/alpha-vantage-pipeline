@@ -21,7 +21,7 @@ stock_type = "apple"
 
 
 @dag(
-    dag_id="alphave_vantage",
+    dag_id="alpha_vantage",
     default_args=default_args,
     description="Project 1",
     start_date=datetime(2026, 7, 24),
