@@ -66,7 +66,7 @@ def test_expected_tasks_present(dagbag):
         "save_to_s3",
         "is_raw_data_save",
         "read_s3_data",
-        "store_data",
+        "store_user",
     }
     missing = expected - task_ids
     assert not missing, f"Expected tasks missing from DAG: {missing}"
