@@ -15,8 +15,8 @@ DAG_ID = "alpha_vantage"
 
 @pytest.fixture(scope="module")
 def dagbag():
-    # Tip: If your tests run from the project root, ensure "dags/" is the correct relative path
-    return DagBag(dag_folder="dags/", include_examples=False)
+    # Remove include_examples=False for Airflow 3 compatibility
+    return DagBag(dag_folder="dags/")
 
 
 def test_no_import_errors(dagbag):
