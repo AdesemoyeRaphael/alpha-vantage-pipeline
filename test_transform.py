@@ -8,7 +8,7 @@ import json
 import pandas as pd
 import pytest
 
-from transform import parse_trade_records, validate_trade_data
+from dags.transform import parse_trade_records, validate_trade_data
 
 
 # ---------- parse_trade_records ----------
