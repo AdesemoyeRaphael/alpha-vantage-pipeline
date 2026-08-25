@@ -15,7 +15,12 @@ DAG_ID = "alpha_vantage"
 
 @pytest.fixture(scope="module")
 def dagbag():
-    # Remove include_examples=False for Airflow 3 compatibility
+    # Airflow 3 requires an initialized DB backend even for some basic DagBag lookups.
+    # We initialize a blank SQLite tracking DB locally for this test context.
+    from airflow.utils.db import initdb
+
+    initdb()
+
     return DagBag(dag_folder="dags/")
 
 
@@ -28,13 +33,14 @@ def test_no_import_errors(dagbag):
 
 def test_alpha_vantage_dag_loaded(dagbag):
     """Verify that our specific DAG was found and parsed successfully."""
-    dag = dagbag.get_dag(dag_id=DAG_ID)
+    # Airflow 3 fix: Pull from the in-memory collection instead of get_dag() database query
+    dag = dagbag.dags.get(DAG_ID)
     assert dag is not None, f"DAG '{DAG_ID}' failed to load or does not exist."
 
 
 def test_dag_has_no_cycles(dagbag):
     """Explicitly test the DAG topology for directed acyclic graph cycles."""
-    dag = dagbag.get_dag(dag_id=DAG_ID)
+    dag = dagbag.dags.get(DAG_ID)
     assert dag is not None, f"DAG '{DAG_ID}' not found to check for cycles."
 
     # Airflow's built-in cycle detector will raise a CycleDetected Exception if it fails
@@ -48,7 +54,7 @@ def test_dag_has_no_cycles(dagbag):
 
 def test_expected_tasks_present(dagbag):
     """Ensure no tasks were accidentally deleted or renamed."""
-    dag = dagbag.get_dag(dag_id=DAG_ID)
+    dag = dagbag.dags.get(DAG_ID)
     assert dag is not None
 
     task_ids = set(dag.task_ids)
@@ -68,7 +74,7 @@ def test_expected_tasks_present(dagbag):
 
 def test_retries_configured(dagbag):
     """Ensure a retry policy is enforced for production reliability."""
-    dag = dagbag.get_dag(dag_id=DAG_ID)
+    dag = dagbag.dags.get(DAG_ID)
     assert dag is not None
 
     # Check default_args dictionary, fallback to checking the attribute directly on a task
@@ -76,12 +82,14 @@ def test_retries_configured(dagbag):
     if retries is None and dag.tasks:
         retries = dag.tasks[0].retries  # check if individual tasks inherited it
 
-    assert retries and retries > 0, f"Retries should be > 0. Found: {retries}"
+    assert (
+        retries is not None and retries > 0
+    ), f"Retries should be > 0. Found: {retries}"
 
 
 def test_catchup_disabled(dagbag):
     """Prevent accidental historical backfills when deploying the DAG."""
-    dag = dagbag.get_dag(dag_id=DAG_ID)
+    dag = dagbag.dags.get(DAG_ID)
     assert dag is not None
     assert (
         dag.catchup is False
