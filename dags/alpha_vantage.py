@@ -1,3 +1,5 @@
+import pandas as pd
+import json
 from airflow.sdk import dag, task
 from airflow.providers.http.sensors.http import HttpSensor
 from airflow.providers.http.operators.http import HttpOperator
@@ -10,9 +12,8 @@ from airflow.providers.amazon.aws.operators.s3 import (
     S3CreateObjectOperator,
     S3ReadObjectOperator,
 )
-import pandas as pd
+from transform import parse_trade_records, validate_trade_data
 from datetime import datetime, timedelta
-import json
 
 default_args = {"owner": "raph", "retries": 1, "retry_delay": timedelta(minutes=5)}
 bucket_name = "my-project-alpha-vantage"
@@ -110,27 +111,7 @@ def alpha_vantage_func():
 
     @task()
     def _process_data(keys, contents):
-        date, open_, close, high, low, volume = [], [], [], [], [], []
-        for key, content in zip(keys, contents):
-            date.append(key["date"])
-            content = json.loads(content)
-            open_.append(float(content.get("1. open")))
-            high.append(float(content.get("2. high")))
-            close.append(float(content.get("4. close")))
-            low.append(float(content.get("3. low")))
-            volume.append(int(content.get("5. volume")))
-
-        df = pd.DataFrame(
-            {
-                "date": date,
-                "open": open_,
-                "close": close,
-                "high": high,
-                "low": low,
-                "volume": volume,
-            }
-        )
-        df["daily_pct_change"] = (df["close"] - df["open"]) / df["open"] * 100
+        df = parse_trade_records(keys, contents)
         path = "/tmp/alpha_vantage_apple_data.parquet"
         df.to_parquet(path)
         return path
@@ -138,10 +119,7 @@ def alpha_vantage_func():
     @task()
     def _data_quality_check(path):
         df = pd.read_parquet(path)
-        if len(df) == 0 or df["date"].isna().any() or df["close"].isna().any():
-            raise ValueError(
-                "Data validation failed: empty DataFrame or missing date/close values"
-            )
+        validate_trade_data(df)
         return path
 
     @task()
@@ -177,7 +155,7 @@ def alpha_vantage_func():
         try:
             cursor.execute(merge_sql)
             result = cursor.fetchone()
-            print(f"Merge result: {result}")
+            print(f"Merge result: {result}")  # (rows_inserted, rows_updated)
             conn.commit()
         finally:
             cursor.close()
