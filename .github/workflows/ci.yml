@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run unit tests (transform logic)
+        run: pytest test_transform.py -v
+
+      - name: Run DAG validation tests
+        run: pytest test_dag_validity.py -v
+
+      - name: Lint with flake8
+        run: |
+          pip install flake8
+          # stop the build on syntax errors / undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # full lint, non-blocking (warnings only)
+          flake8 . --count --exit-zero --max-line-length=100 --statistics
