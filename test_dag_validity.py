@@ -4,42 +4,54 @@ for that) — they catch the class of bug that breaks the DAG from loading at al
 import errors, cycles, missing default_args, retries misconfigured, etc.
 
 Run with: pytest test_dag_validity.py -v
-
-Note: requires Airflow to be installed in the test environment (same version
-as production, ideally — pin it in requirements.txt / requirements-dev.txt).
 """
+
 import pytest
 from airflow.models import DagBag
+
+# Centralize the DAG ID so you only have to change it in one place if it changes
+DAG_ID = "alpha_vantage"
 
 
 @pytest.fixture(scope="module")
 def dagbag():
+    # Tip: If your tests run from the project root, ensure "dags/" is the correct relative path
     return DagBag(dag_folder="dags/", include_examples=False)
 
 
 def test_no_import_errors(dagbag):
-    assert len(dagbag.import_errors) == 0, (
-        f"DAG import errors found: {dagbag.import_errors}"
-    )
+    """Ensure there are no syntax or import errors across the entire DAG folder."""
+    assert (
+        len(dagbag.import_errors) == 0
+    ), f"DAG import errors found: {dagbag.import_errors}"
 
 
 def test_alpha_vantage_dag_loaded(dagbag):
-    dag = dagbag.get_dag(dag_id="alphave_vantage")
-    assert dag is not None, "alphave_vantage DAG failed to load"
+    """Verify that our specific DAG was found and parsed successfully."""
+    dag = dagbag.get_dag(dag_id=DAG_ID)
+    assert dag is not None, f"DAG '{DAG_ID}' failed to load or does not exist."
 
 
 def test_dag_has_no_cycles(dagbag):
-    dag = dagbag.get_dag(dag_id="alphave_vantage")
-    # DagBag.process_file already runs cycle detection on load; if a cycle
-    # existed, the DAG wouldn't be in dagbag.dags at all. This test makes
-    # that assumption explicit rather than relying on it silently.
-    assert dag.dag_id in dagbag.dags
+    """Explicitly test the DAG topology for directed acyclic graph cycles."""
+    dag = dagbag.get_dag(dag_id=DAG_ID)
+    assert dag is not None, f"DAG '{DAG_ID}' not found to check for cycles."
+
+    # Airflow's built-in cycle detector will raise a CycleDetected Exception if it fails
+    from airflow.utils.dag_cycle_tester import check_cycle
+
+    try:
+        check_cycle(dag)
+    except Exception as e:
+        pytest.fail(f"Cycle detected in DAG {DAG_ID}: {e}")
 
 
 def test_expected_tasks_present(dagbag):
-    dag = dagbag.get_dag(dag_id="alphave_vantage")
-    task_ids = set(dag.task_ids)
+    """Ensure no tasks were accidentally deleted or renamed."""
+    dag = dagbag.get_dag(dag_id=DAG_ID)
+    assert dag is not None
 
+    task_ids = set(dag.task_ids)
     expected = {
         "create_table",
         "create_bucket",
@@ -55,15 +67,22 @@ def test_expected_tasks_present(dagbag):
 
 
 def test_retries_configured(dagbag):
-    dag = dagbag.get_dag(dag_id="alphave_vantage")
-    assert dag.default_args.get("retries", 0) > 0, (
-        "retries should be > 0 — a pipeline with retries=0 doesn't "
-        "actually benefit from the retry_delay configured alongside it"
-    )
+    """Ensure a retry policy is enforced for production reliability."""
+    dag = dagbag.get_dag(dag_id=DAG_ID)
+    assert dag is not None
+
+    # Check default_args dictionary, fallback to checking the attribute directly on a task
+    retries = dag.default_args.get("retries")
+    if retries is None and dag.tasks:
+        retries = dag.tasks[0].retries  # check if individual tasks inherited it
+
+    assert retries and retries > 0, f"Retries should be > 0. Found: {retries}"
 
 
 def test_catchup_disabled(dagbag):
-    dag = dagbag.get_dag(dag_id="alphave_vantage")
-    assert dag.catchup is False, (
-        "catchup should be explicitly False unless a backfill is intended"
-    )
+    """Prevent accidental historical backfills when deploying the DAG."""
+    dag = dagbag.get_dag(dag_id=DAG_ID)
+    assert dag is not None
+    assert (
+        dag.catchup is False
+    ), "catchup should be explicitly False unless a backfill is intended"
